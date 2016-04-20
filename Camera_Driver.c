@@ -22,6 +22,7 @@
 #define THRESHOLD_DIVISOR	3
 #define MIN_THRESHOLD 12000
 #define TURN_SCALAR 1.2
+#define HIST_SIZE
 
 // Default System clock value
 // period = 1/20485760  = 4.8814395e-8
@@ -51,6 +52,10 @@ int clkval = 0;
 uint16_t *line;
 uint16_t buffer0[128];
 uint16_t buffer1[128];
+
+uint16_t rolling_buffer[8][128];
+uint16_t blurred_buffer[128];
+
 
 /***********************************************************************
 * PURPOSE: The current ADC value
