@@ -16,10 +16,6 @@
 #define MAX_TURN				90
 #define SERVO_CENTER			50
 
-//PTC8 FTM3_CH4
-
-unsigned int newDutyCycle = 50;
-
 /***********************************************************************
 * PURPOSE: Set the PWM of the servo
 *
@@ -28,16 +24,23 @@ unsigned int newDutyCycle = 50;
 ***********************************************************************/
 void setServoMotor(unsigned int dutyCycle)
 {
+	uint16_t mod = (uint16_t) (((CLOCK * (dutyCycle + 100)) /(Frequency * 8)) / 2000);
+	
 	//implement SERVO_CENTER usage as well (later)
-	if(dutyCycle > MIN_TURN)
+	if(dutyCycle < MIN_TURN)
 	{
-		dutyCycle = MIN_TURN;
+		mod = (uint16_t) (((CLOCK * (MIN_TURN + 100)) /(Frequency * 8)) / 2000);
 	}
-	else if(dutyCycle < MAX_TURN)
+	else if(dutyCycle > MAX_TURN)
 	{
-		dutyCycle = MAX_TURN;
+		mod = (uint16_t) (((CLOCK * (MAX_TURN + 100)) /(Frequency * 8)) / 2000);
 	}
-  newDutyCycle = dutyCycle;
+
+	// Set outputs 
+	FTM3_C4V = mod;
+
+	// Update the clock to the new frequency
+	FTM3_MOD = (CLOCK/Frequency/8);
 }
 /***********************************************************************
 * PURPOSE: Initialize the timer for the servo
@@ -84,26 +87,4 @@ void InitServoMotor(void)
 	// Chose system clock source
 	// Timer Overflow Interrupt Enable
 	FTM3_SC = FTM_SC_PS(3) | FTM_SC_CLKS(1) | FTM_SC_TOIE_MASK;
-	
-	NVIC_EnableIRQ(FTM3_IRQn);
-}
-/***********************************************************************
-* PURPOSE: Interupt handler for the servo timer
-*
-* INPUTS:
-* RETURNS:
-***********************************************************************/
-void FTM3_IRQHandler(void)
-{
-	//Pulse 1 ms to 2 ms
-  //Duty 5% to 10%
-	
-	// Calculate the new cutoff value
-	uint16_t mod = (uint16_t) (((CLOCK * (newDutyCycle + 100)) /(Frequency * 8)) / 2000);
-
-	// Set outputs 
-	FTM3_C4V = mod;
-
-	// Update the clock to the new frequency
-	FTM3_MOD = (CLOCK/Frequency/8);
 }

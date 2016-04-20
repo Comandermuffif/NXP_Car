@@ -12,6 +12,16 @@
 #include "MK64F12.h"
 #include "uart.h"
 #include "Camera_Driver.h"
+#include "DC_Driver.h"
+#include "Servo_Driver.h"
+
+#define LEFT_BOOKEND		2
+#define RIGHT_BOOKEND		125
+// Threshold = avg * scalar / divisor
+#define THRESHOLD_SCALAR	2
+#define THRESHOLD_DIVISOR	3
+#define MIN_THRESHOLD 12000
+#define TURN_SCALAR 1.2
 
 // Default System clock value
 // period = 1/20485760  = 4.8814395e-8
@@ -43,35 +53,9 @@ uint16_t buffer0[128];
 uint16_t buffer1[128];
 
 /***********************************************************************
-* PURPOSE: 1 = newData, others = no new data
-***********************************************************************/
-uint8_t newData = 0;
-
-/***********************************************************************
 * PURPOSE: The current ADC value
 ***********************************************************************/
 uint16_t ADC0VAL;
-
-/***********************************************************************
-* PURPOSE: Get the latest line data
-*
-* INPUTS:
-* RETURNS:
-*	uint16_t *retVal - The latest line data, NULL if no new data
-***********************************************************************/
-uint16_t *GetLineData(void)
-{
-	if(newData != 0)
-	{
-		newData = 0;
-		if(line == &buffer0[0])
-		{
-			return &buffer1[0];
-		}
-		return &buffer0[0];
-	}
-	return NULL;
-}
 
 /***********************************************************************
 * PURPOSE: ADC0 Conversion Complete ISR
@@ -120,6 +104,8 @@ void FTM2_IRQHandler(void){ //For FTM timer
 		clkval = 0; // make sure clock variable = 0
 		pixcnt = -2; // reset counter
 		
+		findLineLocation(line);
+		
 		if(line == &buffer0[0])
 		{
 			line = &buffer1[0];
@@ -128,7 +114,6 @@ void FTM2_IRQHandler(void){ //For FTM timer
 		{
 			line = &buffer0[0];
 		}
-		newData = 1;
 		
 		// Disable FTM2 interrupts (until PIT0 overflows
 		//   again and triggers another line capture)
@@ -325,4 +310,126 @@ void init_ADC0(void) {
 
 	// Enable NVIC interrupt
 	NVIC_EnableIRQ(ADC0_IRQn);
+}
+
+/***********************************************************************
+* PURPOSE: Find the line location and set servo and motor based on that
+*
+* INPUTS:
+*		curr_line - The array of values from the camera
+* RETURNS:
+***********************************************************************/
+void findLineLocation(uint16_t *curr_line)
+{
+	int i, left_index, right_index, largest_dark_area, curr_area, largest_area_index;
+	unsigned int average, threshold;
+	
+	uint16_t processed_line[128];
+	
+	average = 0;
+	for(i = LEFT_BOOKEND; i<RIGHT_BOOKEND; i++)
+	{
+		average = average + curr_line[i];
+	}
+	average = average / (RIGHT_BOOKEND - LEFT_BOOKEND);
+	threshold = (average * THRESHOLD_SCALAR) / THRESHOLD_DIVISOR;
+	if(threshold < MIN_THRESHOLD){
+		return;
+	}
+	// insert filtering here?
+	for(i = LEFT_BOOKEND; i < RIGHT_BOOKEND; i++)
+	{
+		processed_line[i] = (curr_line[i] > threshold);
+	}
+	largest_area_index = 0;
+	largest_dark_area = 0;
+	curr_area = 0;
+	i = (LEFT_BOOKEND + RIGHT_BOOKEND) / 2;
+	left_index = i;
+	right_index = i;
+	
+	// look for dark spot at center
+	if(processed_line[i] == 0)
+	{
+		//cheat for now, optimize later? Can compute area by indexes wo iterating
+		while(processed_line[--i] == 0)
+		{
+			largest_dark_area++;
+			if(i <= LEFT_BOOKEND)
+			{
+				break;
+			}
+		}
+		left_index = i;
+		
+		i = right_index;
+		
+		while(processed_line[++i])
+		{
+			largest_dark_area++;
+			if(i >= RIGHT_BOOKEND)
+			{
+				break;
+			}
+		}
+		right_index = i;
+		
+		largest_area_index = (left_index + right_index) / 2;
+	}
+	
+	while(left_index >= LEFT_BOOKEND)
+	{
+		//can optimize as above
+		i = left_index;
+		curr_area = 0;
+		while(processed_line[--left_index]){
+			if(left_index <= LEFT_BOOKEND)
+			{
+				break;
+			}
+		}
+		while(processed_line[left_index--] == 0){
+			curr_area++;
+			if(left_index <= LEFT_BOOKEND - 1)
+			{
+				if(curr_area > largest_dark_area)
+				{
+					largest_dark_area = curr_area;
+					largest_area_index = i - (curr_area / 2);
+				}
+				break;
+			}
+		}
+	}
+	while(right_index <= RIGHT_BOOKEND)
+	{
+		//can optimize as above
+		i = right_index;
+		curr_area = 0;
+		while(processed_line[++right_index]){
+			if(right_index == RIGHT_BOOKEND)
+			{
+				break;
+			}
+		}
+		while(processed_line[right_index++] == 0){
+			curr_area++;
+			if(right_index >= RIGHT_BOOKEND + 1)
+			{
+				if(curr_area > largest_dark_area)
+				{
+					largest_dark_area = curr_area;
+					largest_area_index = i + (curr_area / 2);
+				}
+				break;
+			}
+		}
+	}
+	//set servo
+	setServoMotor(TURN_SCALAR*((largest_area_index * 100) / 128));
+	uart_putnumU(largest_area_index);
+	uart_put(" ");
+	uart_putnumU((largest_area_index * 100) / 128);
+	
+	uart_put("\r\n");
 }

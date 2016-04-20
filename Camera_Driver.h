@@ -90,3 +90,12 @@ void init_GPIO(void);
 * RETURNS:
 ***********************************************************************/
 void init_ADC0(void);
+
+/***********************************************************************
+* PURPOSE: Find the line location and set servo and motor based on that
+*
+* INPUTS:
+*		curr_line - The array of values from the camera
+* RETURNS:
+***********************************************************************/
+void findLineLocation(uint16_t *curr_line);

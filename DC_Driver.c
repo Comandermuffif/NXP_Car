@@ -39,6 +39,11 @@ void setDCMotor(unsigned int DutyCycle, int motorSelect)
 	{
 		newDutyCycle1 = DutyCycle;
 	}
+	
+	FTM0_C3V = (uint16_t) (((CLOCK/MOTOR_FREQUNECY) * newDutyCycle0) / 100);
+	FTM0_C2V = (uint16_t) (((CLOCK/MOTOR_FREQUNECY) * newDutyCycle1) / 100);
+	FTM0_MOD = (CLOCK/MOTOR_FREQUNECY);
+
 }
 
 /***********************************************************************
@@ -90,20 +95,4 @@ void InitDCMotors(void)
 	// Timer Overflow Interrupt Enable
 	FTM0_SC = FTM_SC_PS(0) | FTM_SC_CLKS(1) | FTM_SC_TOIE_MASK;
 	
-}
-
-/***********************************************************************
-* PURPOSE: Interupt handler for the servo timer
-*
-* INPUTS:
-* RETURNS:
-***********************************************************************/
-void FTM0_IRQHandler(void)
-{
-
-	FTM0_C3V = (uint16_t) (((CLOCK/MOTOR_FREQUNECY) * newDutyCycle0) / 100);
-	FTM0_C2V = (uint16_t) (((CLOCK/MOTOR_FREQUNECY) * newDutyCycle1) / 100);
-
-	// Update the clock to the new frequency
-	FTM0_MOD = (CLOCK/MOTOR_FREQUNECY);
 }
