@@ -9,41 +9,34 @@
 #include "MK64F12.h"
 
 /*From clock setup 0 in system_MK64f12.c*/
-#define DEFAULT_SYSTEM_CLOCK 20485760u /* Default System clock value */
-#define CLOCK					20485760u
+#define SYSTEM_CLOCK			20485760u
 #define MOTOR_OFFSET_0			0.0
 #define MOTOR_OFFSET_1			0.0
 #define MOTOR_FREQUNECY			10000
 
 /*
-PortC3 - Motor0 Drive 
-PortC4 - Motor1 Drive
+	PortC3 - Motor0 Drive 
+	PortC4 - Motor1 Drive
 */
-
-unsigned int newDutyCycle0, newDutyCycle1;
 
 /***********************************************************************
 * PURPOSE: Set the PWM of the drive motors
 *
-* INPUTS:		unsigned in DutyCycle - The duty cycle of the motors (0-100)
+* INPUTS:		unsigned in dutyCycle - The duty cycle of the motors (0-100)
 *						int motorSelect - 0 = Motor0, Others = Motor1
 * RETURNS:
 ***********************************************************************/
-void setDCMotor(unsigned int DutyCycle, int motorSelect)
+void setDCMotor(unsigned int dutyCycle, int motorSelect)
 {
 	if(motorSelect == 0)
 	{
-		newDutyCycle0 = DutyCycle;
+		FTM0_C3V = (uint16_t) (((SYSTEM_CLOCK/MOTOR_FREQUNECY) * dutyCycle) / 100);
 	}
 	else
 	{
-		newDutyCycle1 = DutyCycle;
+		FTM0_C2V = (uint16_t) (((SYSTEM_CLOCK/MOTOR_FREQUNECY) * dutyCycle) / 100);
 	}
-	
-	FTM0_C3V = (uint16_t) (((CLOCK/MOTOR_FREQUNECY) * newDutyCycle0) / 100);
-	FTM0_C2V = (uint16_t) (((CLOCK/MOTOR_FREQUNECY) * newDutyCycle1) / 100);
-	FTM0_MOD = (CLOCK/MOTOR_FREQUNECY);
-
+	FTM0_MOD = (SYSTEM_CLOCK/MOTOR_FREQUNECY);
 }
 
 /***********************************************************************
@@ -77,7 +70,7 @@ void InitDCMotors(void)
 	FTM0_CNTIN = 0;
 
 	// 39.3.5 Set the Modulo resister
-	FTM0_MOD = (CLOCK/MOTOR_FREQUNECY);
+	FTM0_MOD = (SYSTEM_CLOCK/MOTOR_FREQUNECY);
 
 	// 39.3.6 Set the Status and Control of both channels
 	// Used to configure mode, edge and level selection
