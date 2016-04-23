@@ -91,6 +91,11 @@ void init_GPIO(void);
 ***********************************************************************/
 void init_ADC0(void);
 
+/*****
+Buffer new line and blur
+*/
+void bufferAndBlur(uint16_t *curr_line);
+
 /***********************************************************************
 * PURPOSE: Find the line location and set servo and motor based on that
 *
@@ -98,4 +103,4 @@ void init_ADC0(void);
 *		curr_line - The array of values from the camera
 * RETURNS:
 ***********************************************************************/
-void findLineLocation(uint16_t *curr_line);
+void findLineLocation(void);

@@ -18,11 +18,16 @@
 #define LEFT_BOOKEND		2
 #define RIGHT_BOOKEND		125
 // Threshold = avg * scalar / divisor
-#define THRESHOLD_SCALAR	2
-#define THRESHOLD_DIVISOR	3
-#define MIN_THRESHOLD 12000
-#define TURN_SCALAR 1.2
-#define HIST_SIZE
+#define THRESHOLD_SCALAR	1
+#define THRESHOLD_DIVISOR	1
+#define MIN_THRESHOLD 6000
+#define TURN_SCALAR 2.5
+#define BUFFER_SIZE 2
+#define HIST_SIZE 8
+
+#define KP	0.9
+#define KI	0.1
+#define KD	0
 
 // Default System clock value
 // period = 1/20485760  = 4.8814395e-8
@@ -44,6 +49,8 @@ int pixcnt = -2;
 ***********************************************************************/
 int clkval = 0;
 
+uint16_t newDataSinceLast = 0;
+
 /***********************************************************************
 * PURPOSE: The latest value being read by the camera
 *	line - The buffer currently being used to store new data
@@ -53,9 +60,14 @@ uint16_t *line;
 uint16_t buffer0[128];
 uint16_t buffer1[128];
 
-uint16_t rolling_buffer[8][128];
+uint16_t rolling_buffer[BUFFER_SIZE][128] = {0};
+uint16_t buffer_pos = 0;
 uint16_t blurred_buffer[128];
 
+uint16_t line_hist[HIST_SIZE];
+uint16_t hist_pos = 0;
+
+int last_turn = 50;
 
 /***********************************************************************
 * PURPOSE: The current ADC value
@@ -109,7 +121,9 @@ void FTM2_IRQHandler(void){ //For FTM timer
 		clkval = 0; // make sure clock variable = 0
 		pixcnt = -2; // reset counter
 		
-		findLineLocation(line);
+		//findLineLocation(line);
+		bufferAndBlur(line);
+		newDataSinceLast++;
 		
 		if(line == &buffer0[0])
 		{
@@ -317,6 +331,22 @@ void init_ADC0(void) {
 	NVIC_EnableIRQ(ADC0_IRQn);
 }
 
+void bufferAndBlur(uint16_t *curr_line){
+	int i;
+	
+	blurred_buffer[0] = blurred_buffer[0] - rolling_buffer[buffer_pos][0] / BUFFER_SIZE;
+	blurred_buffer[127] = blurred_buffer[127] - rolling_buffer[buffer_pos][127] / BUFFER_SIZE;
+	for(i = 1; i < 127; i++){
+		blurred_buffer[i] = blurred_buffer[i] - (rolling_buffer[buffer_pos][i] / BUFFER_SIZE);
+		rolling_buffer[buffer_pos][i] = (curr_line[i] + curr_line[i + 1] + curr_line[i - 1]) / 3;
+		blurred_buffer[i] = blurred_buffer[i] + (rolling_buffer[buffer_pos][i] / BUFFER_SIZE);
+	}
+	blurred_buffer[0] = blurred_buffer[0] + rolling_buffer[buffer_pos][0] / BUFFER_SIZE;
+	blurred_buffer[127] = blurred_buffer[127] + rolling_buffer[buffer_pos][127] / BUFFER_SIZE;
+	
+	buffer_pos = (buffer_pos + 1) % BUFFER_SIZE;
+}
+
 /***********************************************************************
 * PURPOSE: Find the line location and set servo and motor based on that
 *
@@ -324,42 +354,52 @@ void init_ADC0(void) {
 *		curr_line - The array of values from the camera
 * RETURNS:
 ***********************************************************************/
-void findLineLocation(uint16_t *curr_line)
+void findLineLocation()
 {
-	int i, left_index, right_index, largest_dark_area, curr_area, largest_area_index;
-	unsigned int average, threshold;
+	int i, left_index, right_index, largest_white_area, curr_area, largest_area_index, last_hist;
+	int integral, derivative, proportional, curr_error;
+	unsigned int threshold;
+	long int average;
 	
 	uint16_t processed_line[128];
 	
-	average = 0;
-	for(i = LEFT_BOOKEND; i<RIGHT_BOOKEND; i++)
-	{
-		average = average + curr_line[i];
+	if(!newDataSinceLast){
+		return;
 	}
-	average = average / (RIGHT_BOOKEND - LEFT_BOOKEND);
+	newDataSinceLast = 0;
+	
+	average = 0;
+	for(i = LEFT_BOOKEND; i<=RIGHT_BOOKEND; i++)
+	{
+		average = average + blurred_buffer[i];
+	}
+	average = average / (RIGHT_BOOKEND - LEFT_BOOKEND + 1);
 	threshold = (average * THRESHOLD_SCALAR) / THRESHOLD_DIVISOR;
 	if(threshold < MIN_THRESHOLD){
 		return;
 	}
+	
 	// insert filtering here?
+	
+	
 	for(i = LEFT_BOOKEND; i < RIGHT_BOOKEND; i++)
 	{
-		processed_line[i] = (curr_line[i] > threshold);
+		processed_line[i] = (blurred_buffer[i] > threshold);
 	}
-	largest_area_index = 0;
-	largest_dark_area = 0;
+	largest_area_index = 64;
+	largest_white_area = 0;
 	curr_area = 0;
 	i = (LEFT_BOOKEND + RIGHT_BOOKEND) / 2;
 	left_index = i;
 	right_index = i;
 	
-	// look for dark spot at center
-	if(processed_line[i] == 0)
+	// look for bright spot at center
+	if(processed_line[i])
 	{
 		//cheat for now, optimize later? Can compute area by indexes wo iterating
-		while(processed_line[--i] == 0)
+		while(processed_line[--i])
 		{
-			largest_dark_area++;
+			largest_white_area++;
 			if(i <= LEFT_BOOKEND)
 			{
 				break;
@@ -371,7 +411,7 @@ void findLineLocation(uint16_t *curr_line)
 		
 		while(processed_line[++i])
 		{
-			largest_dark_area++;
+			largest_white_area++;
 			if(i >= RIGHT_BOOKEND)
 			{
 				break;
@@ -387,23 +427,27 @@ void findLineLocation(uint16_t *curr_line)
 		//can optimize as above
 		i = left_index;
 		curr_area = 0;
-		while(processed_line[--left_index]){
+		while(processed_line[--left_index] == 0){
 			if(left_index <= LEFT_BOOKEND)
 			{
 				break;
 			}
 		}
-		while(processed_line[left_index--] == 0){
+		if(left_index < LEFT_BOOKEND)
+		{
+			break;
+		}
+		while(processed_line[left_index--]){
 			curr_area++;
-			if(left_index <= LEFT_BOOKEND - 1)
+			if(left_index < LEFT_BOOKEND)
 			{
-				if(curr_area > largest_dark_area)
-				{
-					largest_dark_area = curr_area;
-					largest_area_index = i - (curr_area / 2);
-				}
 				break;
 			}
+		}
+		if(curr_area > largest_white_area)
+		{
+			largest_white_area = curr_area;
+			largest_area_index = i + (curr_area / 2);
 		}
 	}
 	while(right_index <= RIGHT_BOOKEND)
@@ -411,30 +455,62 @@ void findLineLocation(uint16_t *curr_line)
 		//can optimize as above
 		i = right_index;
 		curr_area = 0;
-		while(processed_line[++right_index]){
-			if(right_index == RIGHT_BOOKEND)
+		while(processed_line[++right_index] == 0){
+			if(right_index >= RIGHT_BOOKEND)
 			{
 				break;
 			}
 		}
-		while(processed_line[right_index++] == 0){
+		if(right_index >= RIGHT_BOOKEND)
+		{
+			break;
+		}
+		while(processed_line[right_index++]){
 			curr_area++;
-			if(right_index >= RIGHT_BOOKEND + 1)
+			if(right_index > RIGHT_BOOKEND)
 			{
-				if(curr_area > largest_dark_area)
-				{
-					largest_dark_area = curr_area;
-					largest_area_index = i + (curr_area / 2);
-				}
 				break;
 			}
+		}
+		if(curr_area > largest_white_area)
+		{
+			largest_white_area = curr_area;
+			largest_area_index = i + (curr_area / 2);
 		}
 	}
-	//set servo
-	setServoMotor(TURN_SCALAR*((largest_area_index * 100) / 128));
-	uart_putnumU(largest_area_index);
-	uart_put(" ");
-	uart_putnumU((largest_area_index * 100) / 128);
+	if(hist_pos != 0){
+		last_hist = hist_pos - 1;
+	}
+	else{
+		last_hist = HIST_SIZE - 1;
+	}
+
+	//uart_putnumU(largest_area_index);
+	//uart_put("\n\r");
+	curr_error =  largest_area_index - line_hist[last_hist];
 	
-	uart_put("\r\n");
+	proportional = KP * curr_error; // KP * (-128, 128)
+	integral = KI * (largest_area_index - 63); // KI * (-64, 64)
+	derivative = KD * curr_error; // KD * (-128, 128)
+	
+	//last_turn = (last_turn + ((proportional + integral + derivative) * 100) / ((KP + KD) * 128 + KI * 64)) / 2;
+	last_turn = (25 * largest_area_index) / 32;
+	last_turn = ((last_turn - 50) * TURN_SCALAR) + 50;
+	if(last_turn < 0){
+		last_turn = 0;
+	}
+	else if(last_turn > 100){
+		last_turn = 100;
+	}
+	
+	//set servo
+	/*uart_putnumU(largest_area_index);
+	uart_put("\t");
+	uart_putnumU(last_turn);
+	uart_put("\n\r");
+	for(i = 0; i<500000; i++);*/
+	setServoMotor(100 - last_turn);
+	
+	line_hist[hist_pos] = largest_area_index;
+	hist_pos = (hist_pos + 1) % HIST_SIZE;
 }

@@ -12,8 +12,8 @@
 #define DEFAULT_SYSTEM_CLOCK 20485760u /* Default System clock value */
 #define CLOCK					20485760u
 #define Frequency			50
-#define MIN_TURN				10
-#define MAX_TURN				90
+#define MIN_TURN				13
+#define MAX_TURN				87
 #define SERVO_CENTER			50
 
 /***********************************************************************

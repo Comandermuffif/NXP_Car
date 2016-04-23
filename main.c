@@ -26,16 +26,18 @@ void delay(int del);
 *   int retVal - The exit code of the program
 ***********************************************************************/
 int main(void)
-{
+{	
 	int i;
-	
 	initialize();
-	setDCMotor(40, 1);
-	setDCMotor(40, 0);
+	setDCMotor(35, 1);
+	setDCMotor(35, 0);
+	setServoMotor(50);
 	// Print welcome over serial
 	uart_put("Running... \n\r");
 	
-	for(;;){}
+	for(;;){
+		findLineLocation();
+	}
 }
 /***********************************************************************
 * PURPOSE: Delay the program
