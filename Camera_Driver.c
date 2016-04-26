@@ -379,9 +379,6 @@ void findLineLocation()
 		return;
 	}
 	
-	// insert filtering here?
-	
-	
 	for(i = LEFT_BOOKEND; i < RIGHT_BOOKEND; i++)
 	{
 		processed_line[i] = (blurred_buffer[i] > threshold);
