@@ -399,8 +399,8 @@ int findCenter(uint16_t *line)
 	int retVal = ARRAY_SIZE/2;
 	int retValArea = 0;
 	
-	int tempLeftIndex = 0;
-	int tempRightIndex = 0;
+	int tempLeftIndex = -1;
+	int tempRightIndex = -1;
 	int tempArea = 0;
 	int i;
 	
@@ -408,6 +408,10 @@ int findCenter(uint16_t *line)
 	{
 		if(line[i] == 0)
 		{
+			if(tempLeftIndex == -1)
+			{
+				tempLeftIndex = i;
+			}
 			tempArea++;
 			tempRightIndex = i;
 		}
@@ -418,8 +422,8 @@ int findCenter(uint16_t *line)
 				retVal = (tempLeftIndex + tempRightIndex)/2;
 				retValArea = tempArea;
 				tempArea = 0;
-				tempLeftIndex = i;
-				tempRightIndex = i;
+				tempLeftIndex = -1;
+				tempRightIndex = -1;
 			}
 		}
 	}
@@ -428,8 +432,8 @@ int findCenter(uint16_t *line)
 		retVal = (tempLeftIndex + tempRightIndex)/2;
 		retValArea = tempArea;
 		tempArea = 0;
-		tempLeftIndex = i;
-		tempRightIndex = i;
+		tempLeftIndex = -1;
+		tempRightIndex = -1;
 	}
 	
 	return retVal;
