@@ -82,37 +82,37 @@
         <Book>
           <Number>0</Number>
           <Title>FRDM-K64F Schematics (FRDM-K64F)</Title>
-          <Path>C:\Keil\ARM\PACK\Keil\Kinetis_K60_DFP\1.3.0\Documents\FRDM-K64F_SCH.pdf</Path>
+          <Path>C:\Keil_v5\ARM\PACK\Keil\Kinetis_K60_DFP\1.4.0\Documents\FRDM-K64F_SCH.pdf</Path>
         </Book>
         <Book>
           <Number>1</Number>
           <Title>User Manual (FRDM-K64F)</Title>
-          <Path>C:\Keil\ARM\PACK\Keil\Kinetis_K60_DFP\1.3.0\Documents\FRDMK64FUG.pdf</Path>
+          <Path>C:\Keil_v5\ARM\PACK\Keil\Kinetis_K60_DFP\1.4.0\Documents\FRDMK64FUG.pdf</Path>
         </Book>
         <Book>
           <Number>2</Number>
           <Title>Quick Start Guide (FRDM-K64F)</Title>
-          <Path>C:\Keil\ARM\PACK\Keil\Kinetis_K60_DFP\1.3.0\Documents\FRDMK64QSG.pdf</Path>
+          <Path>C:\Keil_v5\ARM\PACK\Keil\Kinetis_K60_DFP\1.4.0\Documents\FRDMK64QSG.pdf</Path>
         </Book>
         <Book>
           <Number>3</Number>
           <Title>Quick Start Guide (TWR-K60D100M)</Title>
-          <Path>C:\Keil\ARM\PACK\Keil\Kinetis_K60_DFP\1.3.0\Documents\TWR-K60D100MQSG.pdf</Path>
+          <Path>C:\Keil_v5\ARM\PACK\Keil\Kinetis_K60_DFP\1.4.0\Documents\TWR-K60D100MQSG.pdf</Path>
         </Book>
         <Book>
           <Number>4</Number>
-          <Title>User Manual (TWR-K60D100M)</Title>
-          <Path>C:\Keil\ARM\PACK\Keil\Kinetis_K60_DFP\1.3.0\Documents\TWR-K60D100M_SCH.pdf</Path>
+          <Title>Schematic (TWR-K60D100M)</Title>
+          <Path>C:\Keil_v5\ARM\PACK\Keil\Kinetis_K60_DFP\1.4.0\Documents\TWR-K60D100M_SCH.pdf</Path>
         </Book>
         <Book>
           <Number>5</Number>
           <Title>User Manual (TWR-K60D100M)</Title>
-          <Path>C:\Keil\ARM\PACK\Keil\Kinetis_K60_DFP\1.3.0\Documents\TWRK60D100MUM.pdf</Path>
+          <Path>C:\Keil_v5\ARM\PACK\Keil\Kinetis_K60_DFP\1.4.0\Documents\TWRK60D100MUM.pdf</Path>
         </Book>
         <Book>
           <Number>6</Number>
           <Title>Quick Start Guide (TWR-K64F120M)</Title>
-          <Path>C:\Keil\ARM\PACK\Keil\Kinetis_K60_DFP\1.3.0\Documents\TWRK64FQSG.pdf</Path>
+          <Path>C:\Keil_v5\ARM\PACK\Keil\Kinetis_K60_DFP\1.4.0\Documents\TWRK64FQSG.pdf</Path>
         </Book>
         <Book>
           <Number>7</Number>
@@ -326,6 +326,7 @@
       </DebugFlag>
       <LintExecutable></LintExecutable>
       <LintConfigFile></LintConfigFile>
+      <bLintAuto>0</bLintAuto>
     </TargetOption>
   </Target>
 
@@ -340,7 +341,6 @@
       <FileNumber>1</FileNumber>
       <FileType>1</FileType>
       <tvExp>0</tvExp>
-      <Focus>1</Focus>
       <tvExpOptDlg>0</tvExpOptDlg>
       <bDave2>0</bDave2>
       <PathWithFileName>.\main.c</PathWithFileName>
@@ -353,7 +353,6 @@
       <FileNumber>2</FileNumber>
       <FileType>1</FileType>
       <tvExp>0</tvExp>
-      <Focus>1</Focus>
       <tvExpOptDlg>0</tvExpOptDlg>
       <bDave2>0</bDave2>
       <PathWithFileName>.\DC_Driver.c</PathWithFileName>
@@ -366,7 +365,6 @@
       <FileNumber>3</FileNumber>
       <FileType>5</FileType>
       <tvExp>0</tvExp>
-      <Focus>1</Focus>
       <tvExpOptDlg>0</tvExpOptDlg>
       <bDave2>0</bDave2>
       <PathWithFileName>.\DC_Driver.h</PathWithFileName>
@@ -379,7 +377,6 @@
       <FileNumber>4</FileNumber>
       <FileType>1</FileType>
       <tvExp>0</tvExp>
-      <Focus>1</Focus>
       <tvExpOptDlg>0</tvExpOptDlg>
       <bDave2>0</bDave2>
       <PathWithFileName>.\Servo_Driver.c</PathWithFileName>
@@ -392,7 +389,6 @@
       <FileNumber>5</FileNumber>
       <FileType>5</FileType>
       <tvExp>0</tvExp>
-      <Focus>1</Focus>
       <tvExpOptDlg>0</tvExpOptDlg>
       <bDave2>0</bDave2>
       <PathWithFileName>.\Servo_Driver.h</PathWithFileName>
@@ -405,7 +401,6 @@
       <FileNumber>6</FileNumber>
       <FileType>1</FileType>
       <tvExp>0</tvExp>
-      <Focus>1</Focus>
       <tvExpOptDlg>0</tvExpOptDlg>
       <bDave2>0</bDave2>
       <PathWithFileName>.\uart.c</PathWithFileName>
@@ -418,7 +413,6 @@
       <FileNumber>7</FileNumber>
       <FileType>5</FileType>
       <tvExp>0</tvExp>
-      <Focus>1</Focus>
       <tvExpOptDlg>0</tvExpOptDlg>
       <bDave2>0</bDave2>
       <PathWithFileName>.\uart.h</PathWithFileName>
@@ -431,7 +425,6 @@
       <FileNumber>8</FileNumber>
       <FileType>1</FileType>
       <tvExp>0</tvExp>
-      <Focus>1</Focus>
       <tvExpOptDlg>0</tvExpOptDlg>
       <bDave2>0</bDave2>
       <PathWithFileName>.\Camera_Driver.c</PathWithFileName>
@@ -444,7 +437,6 @@
       <FileNumber>9</FileNumber>
       <FileType>5</FileType>
       <tvExp>0</tvExp>
-      <Focus>1</Focus>
       <tvExpOptDlg>0</tvExpOptDlg>
       <bDave2>0</bDave2>
       <PathWithFileName>.\Camera_Driver.h</PathWithFileName>

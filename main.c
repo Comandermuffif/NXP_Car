@@ -35,9 +35,8 @@ int main(void)
 	// Print welcome over serial
 	uart_put("Running... \n\r");
 	
-	for(;;){
-		findLineLocation();
-		//delay(50);
+	for(;;)
+	{
 	}
 }
 /***********************************************************************
@@ -69,6 +68,7 @@ void initialize()
 
 	//Initialize Servo
 	InitServoMotor();
-
+	
+	//Initialize camera
 	InitCamera();
 }
