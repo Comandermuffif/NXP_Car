@@ -384,7 +384,7 @@ void crushLine(uint16_t *line)
 	for(i = 0; i < ARRAY_SIZE; i++)
 	{
 		// 1 = black, 0 = white
-		line[i] = (line[i] > threshold);
+		line[i] = (line[i] < threshold);
 	}
 }
 
@@ -423,19 +423,16 @@ int findCenter(uint16_t *line)
 			{
 				retVal = (tempLeftIndex + tempRightIndex)/2;
 				retValArea = tempArea;
-				tempArea = 0;
-				tempLeftIndex = -1;
-				tempRightIndex = -1;
 			}
+			tempArea = 0;
+			tempLeftIndex = -1;
+			tempRightIndex = -1;
 		}
 	}
 	if(tempArea > retValArea)
 	{
 		retVal = (tempLeftIndex + tempRightIndex)/2;
 		retValArea = tempArea;
-		tempArea = 0;
-		tempLeftIndex = -1;
-		tempRightIndex = -1;
 	}
 	
 	return retVal;
