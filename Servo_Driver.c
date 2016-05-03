@@ -9,6 +9,7 @@
 #include "MK64F12.h"
 #include "Servo_Driver.h"
 
+#define DEFAULT_SYSTEM_CLOCK 20485760u /* Default System clock value */
 #define CLOCK					20485760u
 #define Frequency			50
 #define MIN_TURN				13
