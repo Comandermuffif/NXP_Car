@@ -57,8 +57,8 @@ int main(void)
 		}
 		else
 		{
-			setDCMotor(38, 1);
-			setDCMotor(38, 0);
+			//setDCMotor(38, 1);
+			//setDCMotor(38, 0);
 			
 			//Set Green LED
 			GPIOE_PCOR = (1 << 26);

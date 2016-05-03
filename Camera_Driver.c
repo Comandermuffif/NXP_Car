@@ -32,7 +32,7 @@
 // Threshold = avg * scalar / divisor
 #define THRESHOLD_SCALAR	1
 #define THRESHOLD_DIVISOR	1
-#define MIN_THRESHOLD 6000
+#define MIN_THRESHOLD 4000
 #define TURN_SCALAR 3
 
 #define KP	0.9
@@ -339,11 +339,14 @@ void findLineLocation(uint16_t *curr_line)
 	crushLine(curr_line);
 	center = findCenter(curr_line);
 	//Positive = Too far to right, Negative = Too far to left
-	error = (ARRAY_SIZE/2) - center;
+	error = (ARRAY_SIZE >> 1) - center;
 	newTurn = lastTurn + KP * (error - errorHistory[0])
 		+ KI * (error + errorHistory[0])/2
 		+ KD * (error - 2 * errorHistory[0] + errorHistory[1]);
-	setServoMotor(newTurn);
+	
+	setServoMotor(error + 64);
+	
+	//setServoMotor(newTurn);
 	lastTurn = newTurn;
 	for(i = ERROR_HISTORY_SIZE - 1; i > 0; i--)
 	{
