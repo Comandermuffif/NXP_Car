@@ -22,21 +22,22 @@ void delay(int del);
 * PURPOSE: Main entry point for the program
 *
 * INPUTS:
-* RETURNS:
+* TURNS:
 *   int retVal - The exit code of the program
 ***********************************************************************/
 int main(void)
 {	
 	int i;
 	initialize();
-	setDCMotor(35, 1);
-	setDCMotor(35, 0);
+	setDCMotor(38, 1);
+	setDCMotor(38, 0);
 	setServoMotor(50);
 	// Print welcome over serial
 	uart_put("Running... \n\r");
 	
 	for(;;){
 		findLineLocation();
+		//delay(50);
 	}
 }
 /***********************************************************************

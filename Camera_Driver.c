@@ -15,13 +15,17 @@
 #include "DC_Driver.h"
 #include "Servo_Driver.h"
 
+#define DEFAULT_SYSTEM_CLOCK 20485760u /* Default System clock value */
+#define UPDATE_FREQUENCY 50
+#define MOD_AMOUNT 50
+
 #define LEFT_BOOKEND		2
 #define RIGHT_BOOKEND		125
 // Threshold = avg * scalar / divisor
 #define THRESHOLD_SCALAR	1
 #define THRESHOLD_DIVISOR	1
 #define MIN_THRESHOLD 6000
-#define TURN_SCALAR 2.5
+#define TURN_SCALAR 3
 #define BUFFER_SIZE 2
 #define HIST_SIZE 8
 
@@ -154,7 +158,7 @@ void PIT0_IRQHandler(void){
 	
 	// Setting mod resets the FTM counter
 	//FTM2_MOD = FTM_MOD_MOD_MASK & (DEFAULT_SYSTEM_CLOCK /100000 << FTM_MOD_MOD_SHIFT);
-	FTM2_MOD = 100;
+	FTM2_MOD = MOD_AMOUNT;
 	
 	// Enable FTM2 interrupts (camera)
 	FTM2_SC |= FTM_SC_TOIE_MASK;
@@ -202,7 +206,9 @@ void init_FTM2(){
 	
 	// Set the period (~10us)
 	//FTM2_MOD = FTM_MOD_MOD_MASK & ((DEFAULT_SYSTEM_CLOCK /100000) << FTM_MOD_MOD_SHIFT);
-	FTM2_MOD = 100;
+	
+	
+	FTM2_MOD = MOD_AMOUNT;
 	
 	// 50% duty
 	//FTM2_C0V = FTM_CnV_VAL_MASK & (((DEFAULT_SYSTEM_CLOCK /100000) << 1) << FTM_CnV_VAL_SHIFT);
@@ -366,7 +372,10 @@ void findLineLocation()
 	if(!newDataSinceLast){
 		return;
 	}
-	newDataSinceLast = 0;
+	//if(newDataSinceLast > 100){
+	//uart_putnumU(newDataSinceLast);
+	//uart_put("\n\r");
+	newDataSinceLast = 0;//}
 	
 	average = 0;
 	for(i = LEFT_BOOKEND; i<=RIGHT_BOOKEND; i++)
