@@ -17,6 +17,8 @@
 
 void initialize(void);
 void delay(int del);
+void Button_Init(void);
+void LED_Init(void);
 
 /***********************************************************************
 * PURPOSE: Main entry point for the program
@@ -27,16 +29,41 @@ void delay(int del);
 ***********************************************************************/
 int main(void)
 {	
-	int i;
+	
+	int enable = 0;
+	
 	initialize();
-	setDCMotor(38, 1);
-	setDCMotor(38, 0);
+	setDCMotor(0, 1);
+	setDCMotor(0, 0);
 	setServoMotor(50);
 	// Print welcome over serial
 	uart_put("Running... \n\r");
 	
 	for(;;)
 	{
+		if((GPIOC_PDIR & (1 << 6)) == 0)
+		{
+			enable = 1;
+		}
+		if(enable == 0)
+		{
+			setDCMotor(0, 1);
+			setDCMotor(0, 0);
+			setServoMotor(50);
+			
+			//Set Red LED
+			GPIOB_PCOR = (1 << 22);
+			GPIOE_PSOR = 1UL << 26;
+		}
+		else
+		{
+			setDCMotor(38, 1);
+			setDCMotor(38, 0);
+			
+			//Set Green LED
+			GPIOE_PCOR = (1 << 26);
+			GPIOB_PSOR = (1UL << 21) | (1UL << 22);
+		}
 	}
 }
 /***********************************************************************
@@ -71,4 +98,54 @@ void initialize()
 	
 	//Initialize camera
 	InitCamera();
+	
+	//Init Pushbutton
+	Button_Init();
+	
+	//Init Status LEDs
+	LED_Init();
+}
+
+/*********************************************************************** 
+* PURPOSE: Initialize push button pin for input
+*
+* INPUTS:
+* RETURNS:
+***********************************************************************/
+void Button_Init(void){
+	// Enable clock for Port C PTC6 button
+	SIM_SCGC5 |= SIM_SCGC5_PORTC_MASK;
+	
+	// Configure the Mux for the button
+	PORTC_PCR6 = PORT_PCR_MUX(1);
+
+	// Set the push button as an input (0)
+	GPIOC_PDDR &= ~(1 << 6);
+}
+
+/***********************************************************************
+* PURPOSE: Initialize LED pins and multiplexers for output
+*
+* INPUTS:
+* RETURNS:
+***********************************************************************/
+void LED_Init(void)
+{
+	// Enable clocks on Ports B, C, and E for LED timing
+	SIM_SCGC5 |= SIM_SCGC5_PORTB_MASK;
+	SIM_SCGC5 |= SIM_SCGC5_PORTC_MASK;
+	SIM_SCGC5 |= SIM_SCGC5_PORTE_MASK;
+	
+	// Configure the Signal Multiplexer for GPIO
+	PORTB_PCR21 = PORT_PCR_MUX(1);
+	PORTB_PCR22 = PORT_PCR_MUX(1);
+	PORTE_PCR26 = PORT_PCR_MUX(1);
+	
+	// Switch the GPIO pins to output mode (1)
+	GPIOB_PDDR |= (1 << 21) | (1 << 22);
+	GPIOE_PDDR |= (1 << 26);
+
+	// Turn off the LEDs (Active  low)
+	GPIOB_PSOR |= (1 << 21) | (1 << 22);
+	GPIOE_PSOR |= (1 << 26);
 }

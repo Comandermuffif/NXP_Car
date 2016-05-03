@@ -106,7 +106,7 @@ void FTM2_IRQHandler(void)
 		if (!clkval) {	// check for falling edge
 			// ADC read (note that integer division is 
 			//  occurring here for indexing the array)
-			line[pixcnt/2] = ADC0VAL;
+			buffer[pixcnt/2] = ADC0VAL;
 		}
 		pixcnt += 1;
 	} else if (pixcnt < 2) {
@@ -115,7 +115,7 @@ void FTM2_IRQHandler(void)
 		} else if (pixcnt == 1) {
 			GPIOB_PCOR |= (1 << 23); // SI = 0
 			// ADC read
-			line[0] = ADC0VAL;
+			buffer[0] = ADC0VAL;
 		} 
 		pixcnt += 1;
 	} else {
@@ -123,7 +123,7 @@ void FTM2_IRQHandler(void)
 		clkval = 0; // make sure clock variable = 0
 		pixcnt = -2; // reset counter
 		
-		findLineLocation(line); //Process the line and set the servo
+		findLineLocation(buffer); //Process the line and set the servo
 		
 		// Disable FTM2 interrupts (until PIT0 overflows
 		//   again and triggers another line capture)
@@ -162,8 +162,6 @@ void PIT0_IRQHandler(void)
 ***********************************************************************/
 void InitCamera(void)
 {
-	line = &buffer[0];
-	
 	init_GPIO(); // For CLK and SI output on GPIO
 	init_FTM2(); // To generate CLK, SI, and trigger ADC
 	init_ADC0();
@@ -345,7 +343,7 @@ void findLineLocation(uint16_t *curr_line)
 	newTurn = lastTurn + KP * (error - errorHistory[0])
 		+ KI * (error + errorHistory[0])/2
 		+ KD * (error - 2 * errorHistory[0] + errorHistory[1]);
-	setServo(newTurn);
+	setServoMotor(newTurn);
 	lastTurn = newTurn;
 	for(i = ERROR_HISTORY_SIZE - 1; i > 0; i--)
 	{
@@ -365,6 +363,7 @@ void findLineLocation(uint16_t *curr_line)
 void crushLine(uint16_t *line)
 {
 	uint16_t average = 0;
+	uint16_t threshold = 0;
 	int i;
 	
 	for(i = LEFT_BOOKEND; i <= RIGHT_BOOKEND; i++)
