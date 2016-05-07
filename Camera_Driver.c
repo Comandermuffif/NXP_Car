@@ -15,60 +15,70 @@
 #include "DC_Driver.h"
 #include "Servo_Driver.h"
 
-#define DEFAULT_SYSTEM_CLOCK 20485760u
+#define DEFAULT_SYSTEM_CLOCK 20485760u /* Default System clock value */
+#define UPDATE_FREQUENCY 50
 #define MOD_AMOUNT 50
 
-/* The size of the camera line scan*/
-#define ARRAY_SIZE			128
-
-/* The number of history points to keep */
-#define ERROR_HISTORY_SIZE	4
-
-/* The left index of the usable camera data */
 #define LEFT_BOOKEND		2
-/* The right index of the usable camera data */
 #define RIGHT_BOOKEND		125
-
 // Threshold = avg * scalar / divisor
 #define THRESHOLD_SCALAR	1
 #define THRESHOLD_DIVISOR	1
-#define MIN_THRESHOLD 4000
-#define TURN_SCALAR 3
+#define MIN_THRESHOLD 5500
+#define TURN_SCALAR 3.1
+#define BUFFER_SIZE 2
+#define HIST_SIZE 8
+
+//40
+#define MIN_SPEED 43
+//0.5
+#define SPEED_SCALAR 0.5
 
 #define KP	0.9
 #define KI	0.1
 #define KD	0
 
-/***********************************************************************
-* PURPOSE: Pixel counter for storing camera data
-*	-2 is set for the SI pulse
-***********************************************************************/
+// Default System clock value
+// period = 1/20485760  = 4.8814395e-8
+#define DEFAULT_SYSTEM_CLOCK 20485760u 
+// Integration time (seconds)
+// Determines how high the camera values are
+// Don't exceed 100ms or the caps will saturate
+// Must be above 1.25 ms based on camera clk 
+//	(camera clk is the mod value set in FTM2)
+#define INTEGRATION_TIME .0075f
+
+// Pixel counter for camera logic
+// Starts at -2 so that the SI pulse occurs
+//		ADC reads start
 int pixcnt = -2;
+
+extern int state;
 
 /***********************************************************************
 * PURPOSE: The clock value that's toggled by the FTM
 ***********************************************************************/
 int clkval = 0;
 
-/***********************************************************************
-* PURPOSE: The last value sent to the servo
-***********************************************************************/
-int lastTurn;
+uint16_t newDataSinceLast = 0;
 
 /***********************************************************************
 * PURPOSE: The latest value being read by the camera
-*	buffer - Buffer used to store line data
+*	line - The buffer currently being used to store new data
+*	buffer0, buffer1 - Buffers used to store line data
 ***********************************************************************/
-uint16_t buffer[ARRAY_SIZE];
+uint16_t *line;
+uint16_t buffer0[128];
+uint16_t buffer1[128];
 
-/***********************************************************************
-* PURPOSE: The last differences of the error
-*		The error is calculated as the difference between
-*		the camera center and the calculated center
-*		Positive = Too far to right, Negative = Too far to left
-*	errorHistory - Array of camera errors
-***********************************************************************/
-int errorHistory[ERROR_HISTORY_SIZE];
+uint16_t rolling_buffer[BUFFER_SIZE][128] = {0};
+uint16_t buffer_pos = 0;
+uint16_t blurred_buffer[128];
+
+uint16_t line_hist[HIST_SIZE];
+uint16_t hist_pos = 0;
+
+int last_turn = 50;
 
 /***********************************************************************
 * PURPOSE: The current ADC value
@@ -93,8 +103,7 @@ void ADC0_IRQHandler(void)
 * INPUTS:
 * RETURNS:
 ***********************************************************************/
-void FTM2_IRQHandler(void)
-{ //For FTM timer
+void FTM2_IRQHandler(void){ //For FTM timer
 	// Clear interrupt
 	FTM2_SC &= ~FTM_SC_TOF_MASK;
 	
@@ -102,11 +111,11 @@ void FTM2_IRQHandler(void)
 	GPIOB_PTOR |= (1 << 9); // CLK = !CLK
 	
 	// Line capture logic
-	if ((pixcnt >= 2) && (pixcnt < 2 * ARRAY_SIZE)) {
+	if ((pixcnt >= 2) && (pixcnt < 256)) {
 		if (!clkval) {	// check for falling edge
 			// ADC read (note that integer division is 
 			//  occurring here for indexing the array)
-			buffer[pixcnt/2] = ADC0VAL;
+			line[pixcnt/2] = ADC0VAL;
 		}
 		pixcnt += 1;
 	} else if (pixcnt < 2) {
@@ -115,7 +124,7 @@ void FTM2_IRQHandler(void)
 		} else if (pixcnt == 1) {
 			GPIOB_PCOR |= (1 << 23); // SI = 0
 			// ADC read
-			buffer[0] = ADC0VAL;
+			line[0] = ADC0VAL;
 		} 
 		pixcnt += 1;
 	} else {
@@ -123,7 +132,18 @@ void FTM2_IRQHandler(void)
 		clkval = 0; // make sure clock variable = 0
 		pixcnt = -2; // reset counter
 		
-		findLineLocation(buffer); //Process the line and set the servo
+		//findLineLocation(line);
+		bufferAndBlur(line);
+		newDataSinceLast++;
+		
+		if(line == &buffer0[0])
+		{
+			line = &buffer1[0];
+		}
+		else
+		{
+			line = &buffer0[0];
+		}
 		
 		// Disable FTM2 interrupts (until PIT0 overflows
 		//   again and triggers another line capture)
@@ -139,8 +159,7 @@ void FTM2_IRQHandler(void)
 * INPUTS:
 * RETURNS:
 ***********************************************************************/
-void PIT0_IRQHandler(void)
-{
+void PIT0_IRQHandler(void){
 	// Clear interrupt
 	PIT_TFLG0 |= PIT_TFLG_TIF_MASK;
 	
@@ -162,6 +181,8 @@ void PIT0_IRQHandler(void)
 ***********************************************************************/
 void InitCamera(void)
 {
+	line = &buffer0[0];
+	
 	init_GPIO(); // For CLK and SI output on GPIO
 	init_FTM2(); // To generate CLK, SI, and trigger ADC
 	init_ADC0();
@@ -174,8 +195,7 @@ void InitCamera(void)
 * INPUTS:
 * RETURNS:
 ***********************************************************************/
-void init_FTM2()
-{
+void init_FTM2(){
 	// Enable clock
 	SIM_SCGC6 |= SIM_SCGC6_FTM2_MASK;
 
@@ -194,6 +214,7 @@ void init_FTM2()
 	// Set the period (~10us)
 	//FTM2_MOD = FTM_MOD_MOD_MASK & ((DEFAULT_SYSTEM_CLOCK /100000) << FTM_MOD_MOD_SHIFT);
 	
+	
 	FTM2_MOD = MOD_AMOUNT;
 	
 	// 50% duty
@@ -202,6 +223,7 @@ void init_FTM2()
 	
 	// Set edge-aligned mode
 	FTM2_C0SC |= FTM_CnSC_MSB_MASK;
+	
 	
 	// Enable High-true pulses
 	// ELSB = 1, ELSA = 0
@@ -228,8 +250,7 @@ void init_FTM2()
 * INPUTS:
 * RETURNS:
 ***********************************************************************/
-void init_PIT(void)
-{
+void init_PIT(void){
 	// Setup periodic interrupt timer (PIT)
 	
 	// Enable clock for timers
@@ -241,8 +262,8 @@ void init_PIT(void)
 	
 	// PIT clock frequency is the system clock
 	// Load the value that the timer will count down from
-	// TODO: Look into this value
 	PIT_LDVAL0 |= PIT_LDVAL_TSV_MASK & ( DEFAULT_SYSTEM_CLOCK / 100 << PIT_LDVAL_TSV_SHIFT);
+	//PIT_LDVAL0 |= PIT_LDVAL_TSV_MASK & ( DEFAULT_SYSTEM_CLOCK / 250 << PIT_LDVAL_TSV_SHIFT);
 	
 	// Enable timer interrupts
 	PIT_TCTRL0 |= PIT_TCTRL_TIE_MASK;
@@ -267,8 +288,7 @@ void init_PIT(void)
 * INPUTS:
 * RETURNS:
 ***********************************************************************/
-void init_GPIO(void)
-{
+void init_GPIO(void){
 	// Enable LED and GPIO so we can see results
 	SIM_SCGC5 |= (SIM_SCGC5_PORTB_MASK);
 	
@@ -286,8 +306,7 @@ void init_GPIO(void)
 * INPUTS:
 * RETURNS:
 ***********************************************************************/
-void init_ADC0(void)
-{
+void init_ADC0(void) {
 	unsigned int calib;
 	// Turn on ADC0
 	SIM_SCGC6 |= SIM_SCGC6_ADC0_MASK;
@@ -325,115 +344,206 @@ void init_ADC0(void)
 	NVIC_EnableIRQ(ADC0_IRQn);
 }
 
+void bufferAndBlur(uint16_t *curr_line){
+	int i;
+	
+	blurred_buffer[0] = blurred_buffer[0] - rolling_buffer[buffer_pos][0] / BUFFER_SIZE;
+	blurred_buffer[127] = blurred_buffer[127] - rolling_buffer[buffer_pos][127] / BUFFER_SIZE;
+	for(i = 1; i < 127; i++){
+		blurred_buffer[i] = blurred_buffer[i] - (rolling_buffer[buffer_pos][i] / BUFFER_SIZE);
+		rolling_buffer[buffer_pos][i] = (curr_line[i] + curr_line[i + 1] + curr_line[i - 1]) / 3;
+		blurred_buffer[i] = blurred_buffer[i] + (rolling_buffer[buffer_pos][i] / BUFFER_SIZE);
+	}
+	blurred_buffer[0] = blurred_buffer[0] + rolling_buffer[buffer_pos][0] / BUFFER_SIZE;
+	blurred_buffer[127] = blurred_buffer[127] + rolling_buffer[buffer_pos][127] / BUFFER_SIZE;
+	
+	buffer_pos = (buffer_pos + 1) % BUFFER_SIZE;
+}
+
 /***********************************************************************
 * PURPOSE: Find the line location and set servo and motor based on that
 *
 * INPUTS:
-*		uint16_t *curr_line - The array of values from the camera
+*		curr_line - The array of values from the camera
 * RETURNS:
 ***********************************************************************/
-void findLineLocation(uint16_t *curr_line)
+void findLineLocation()
 {
-	int center, error, newTurn, i;
+	int i, left_index, right_index, largest_white_area, curr_area, largest_area_index, last_hist;
+	int integral, derivative, proportional, curr_error;
+	unsigned int threshold;
+	long int average;
 	
-	crushLine(curr_line);
-	center = findCenter(curr_line);
-	//Positive = Too far to right, Negative = Too far to left
-	error = (ARRAY_SIZE >> 1) - center;
-	newTurn = lastTurn + KP * (error - errorHistory[0])
-		+ KI * (error + errorHistory[0])/2
-		+ KD * (error - 2 * errorHistory[0] + errorHistory[1]);
+	uint16_t processed_line[128];
 	
-	setServoMotor(error + 64);
-	
-	//setServoMotor(newTurn);
-	lastTurn = newTurn;
-	for(i = ERROR_HISTORY_SIZE - 1; i > 0; i--)
-	{
-		errorHistory[i] = errorHistory[i - 1];
+	if(!newDataSinceLast){
+		return;
 	}
-	errorHistory[0] = error;
-}
-
-/***********************************************************************
-* PURPOSE: Convert analog line to binary
-*		1 = black, 0 = white
-*
-* INPUTS:
-*		uint16_t *line - The array of values to convert (in position)
-* RETURNS:
-***********************************************************************/
-void crushLine(uint16_t *line)
-{
-	uint16_t average = 0;
-	uint16_t threshold = 0;
-	int i;
+	//if(newDataSinceLast > 100){
+	//uart_putnumU(newDataSinceLast);
+	//uart_put("\n\r");
+	newDataSinceLast = 0;//}
 	
-	for(i = LEFT_BOOKEND; i <= RIGHT_BOOKEND; i++)
+	average = 0;
+	for(i = LEFT_BOOKEND; i<=RIGHT_BOOKEND; i++)
 	{
-		average += line[i];
+		average = average + blurred_buffer[i];
 	}
-	average = average / ((RIGHT_BOOKEND + 1) - LEFT_BOOKEND);
-	threshold = (average * THRESHOLD_SCALAR)/THRESHOLD_DIVISOR;
-	
-	if(threshold < MIN_THRESHOLD)
-	{
-		threshold = MIN_THRESHOLD;
-	}
-	
-	for(i = 0; i < ARRAY_SIZE; i++)
-	{
-		// 1 = black, 0 = white
-		line[i] = (line[i] < threshold);
-	}
-}
-
-/***********************************************************************
-* PURPOSE: Find the index of the largest white section
-*
-* INPUTS:
-*		uint16_t *line - The array of values to convert (in position)
-* RETURNS:
-*		int retVal - The index of the largest white area
-***********************************************************************/
-int findCenter(uint16_t *line)
-{
-	int retVal = ARRAY_SIZE/2;
-	int retValArea = 0;
-	
-	int tempLeftIndex = -1;
-	int tempRightIndex = -1;
-	int tempArea = 0;
-	int i;
-	
-	for(i = LEFT_BOOKEND; i <= RIGHT_BOOKEND; i++)
-	{
-		if(line[i] == 0)
+	average = average / (RIGHT_BOOKEND - LEFT_BOOKEND + 1);
+	threshold = (average * THRESHOLD_SCALAR) / THRESHOLD_DIVISOR;
+	if(threshold < MIN_THRESHOLD){
+		if(state == 1)
 		{
-			if(tempLeftIndex == -1)
+			state = 2;
+		}
+		return;
+	}
+	
+	for(i = LEFT_BOOKEND; i < RIGHT_BOOKEND; i++)
+	{
+		processed_line[i] = (blurred_buffer[i] > threshold);
+	}
+	largest_area_index = 64;
+	largest_white_area = 0;
+	curr_area = 0;
+	i = (LEFT_BOOKEND + RIGHT_BOOKEND) / 2;
+	left_index = i;
+	right_index = i;
+	
+	// look for bright spot at center
+	if(processed_line[i])
+	{
+		//cheat for now, optimize later? Can compute area by indexes wo iterating
+		while(processed_line[--i])
+		{
+			largest_white_area++;
+			if(i <= LEFT_BOOKEND)
 			{
-				tempLeftIndex = i;
+				break;
 			}
-			tempArea++;
-			tempRightIndex = i;
+		}
+		left_index = i;
+		
+		i = right_index;
+		
+		while(processed_line[++i])
+		{
+			largest_white_area++;
+			if(i >= RIGHT_BOOKEND)
+			{
+				break;
+			}
+		}
+		right_index = i;
+		
+		largest_area_index = (left_index + right_index) / 2;
+	}
+	
+	while(left_index >= LEFT_BOOKEND)
+	{
+		//can optimize as above
+		i = left_index;
+		curr_area = 0;
+		while(processed_line[--left_index] == 0){
+			if(left_index <= LEFT_BOOKEND)
+			{
+				break;
+			}
+		}
+		if(left_index < LEFT_BOOKEND)
+		{
+			break;
+		}
+		while(processed_line[left_index--]){
+			curr_area++;
+			if(left_index < LEFT_BOOKEND)
+			{
+				break;
+			}
+		}
+		if(curr_area > largest_white_area)
+		{
+			largest_white_area = curr_area;
+			largest_area_index = i + (curr_area / 2);
+		}
+	}
+	while(right_index <= RIGHT_BOOKEND)
+	{
+		//can optimize as above
+		i = right_index;
+		curr_area = 0;
+		while(processed_line[++right_index] == 0){
+			if(right_index >= RIGHT_BOOKEND)
+			{
+				break;
+			}
+		}
+		if(right_index >= RIGHT_BOOKEND)
+		{
+			break;
+		}
+		while(processed_line[right_index++]){
+			curr_area++;
+			if(right_index > RIGHT_BOOKEND)
+			{
+				break;
+			}
+		}
+		if(curr_area > largest_white_area)
+		{
+			largest_white_area = curr_area;
+			largest_area_index = i + (curr_area / 2);
+		}
+	}
+	if(hist_pos != 0){
+		last_hist = hist_pos - 1;
+	}
+	else{
+		last_hist = HIST_SIZE - 1;
+	}
+
+	//uart_putnumU(largest_area_index);
+	//uart_put("\n\r");
+	curr_error =  largest_area_index - line_hist[last_hist];
+	
+	proportional = KP * curr_error; // KP * (-128, 128)
+	integral = KI * (largest_area_index - 63); // KI * (-64, 64)
+	derivative = KD * curr_error; // KD * (-128, 128)
+	
+	//last_turn = (last_turn + ((proportional + integral + derivative) * 100) / ((KP + KD) * 128 + KI * 64)) / 2;
+	last_turn = (25 * largest_area_index) / 32;
+	last_turn = ((last_turn - 50) * TURN_SCALAR) + 50;
+	if(last_turn < 0){
+		last_turn = 0;
+	}
+	else if(last_turn > 100){
+		last_turn = 100;
+	}
+	
+	//set servo
+	/*uart_putnumU(largest_area_index);
+	uart_put("\t");
+	uart_putnumU(last_turn);
+	uart_put("\n\r");
+	for(i = 0; i<500000; i++);*/
+	
+	if(state == 1)
+	{
+		setServoMotor(100 - last_turn);
+	
+		//1 = left, 0 = right
+		if(last_turn > 50)
+		{
+			setDCMotor(MIN_SPEED + (50 - (last_turn - 50)) * SPEED_SCALAR, 1);
+			setDCMotor(MIN_SPEED + (50 - (last_turn - 50)) * SPEED_SCALAR, 0);
 		}
 		else
 		{
-			if(tempArea > retValArea)
-			{
-				retVal = (tempLeftIndex + tempRightIndex)/2;
-				retValArea = tempArea;
-			}
-			tempArea = 0;
-			tempLeftIndex = -1;
-			tempRightIndex = -1;
+			setDCMotor(MIN_SPEED + last_turn * SPEED_SCALAR, 1);
+			setDCMotor(MIN_SPEED + last_turn * SPEED_SCALAR, 0);
 		}
 	}
-	if(tempArea > retValArea)
-	{
-		retVal = (tempLeftIndex + tempRightIndex)/2;
-		retValArea = tempArea;
-	}
 	
-	return retVal;
+	line_hist[hist_pos] = largest_area_index;
+	hist_pos = (hist_pos + 1) % HIST_SIZE;
 }

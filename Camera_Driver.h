@@ -17,6 +17,15 @@
 ***********************************************************************/
 
 /***********************************************************************
+* PURPOSE: Get the latest line data
+*
+* INPUTS:
+* RETURNS:
+*	uint16_t *retVal - The latest line data, NULL if no new data
+***********************************************************************/
+uint16_t *GetLineData(void);
+
+/***********************************************************************
 * PURPOSE: ADC0 Conversion Complete ISR
 *
 * INPUTS:
@@ -68,9 +77,6 @@ void init_PIT(void);
 
 /***********************************************************************
 * PURPOSE: Initialize GPIO
-*	PTB9 - Camera CLK
-*	PTB23 - Camera SI
-*	PTB22 - Red LED
 *
 * INPUTS:
 * RETURNS:
@@ -85,31 +91,16 @@ void init_GPIO(void);
 ***********************************************************************/
 void init_ADC0(void);
 
+/*****
+Buffer new line and blur
+*/
+void bufferAndBlur(uint16_t *curr_line);
+
 /***********************************************************************
 * PURPOSE: Find the line location and set servo and motor based on that
 *
 * INPUTS:
-*		uint16_t *curr_line - The array of values from the camera
+*		curr_line - The array of values from the camera
 * RETURNS:
 ***********************************************************************/
-void findLineLocation(uint16_t *curr_line);
-
-/***********************************************************************
-* PURPOSE: Convert analog line to binary
-*		1 = black, 0 = white
-*
-* INPUTS:
-*		uint16_t *line - The array of values to convert (in position)
-* RETURNS:
-***********************************************************************/
-void crushLine(uint16_t *line);
-
-/***********************************************************************
-* PURPOSE: Find the index of the largest white section
-*
-* INPUTS:
-*		uint16_t *line - The array of values to convert (in position)
-* RETURNS:
-*		int retVal - The index of the largest white area
-***********************************************************************/
-int findCenter(uint16_t *line);
+void findLineLocation(void);
