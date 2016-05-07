@@ -20,7 +20,10 @@
 0 = wait
 1 = go
 2 = dead
+3 = wait
 */
+
+int ready = 1;
 
 /***********************************************************************
 * PURPOSE: Main entry point for the program
@@ -37,9 +40,21 @@ int main(void)
 	
 	for(;;)
 	{
-		if(state == 0 && ((GPIOC_PDIR & (1 << 6)) == 0))
+		if(state == 0 && ((GPIOC_PDIR & (1 << 6)) == 0) && ready == 1)
 		{
 			state = 1;
+			ready = 0;
+		}
+		
+		if(state == 2 && ((GPIOC_PDIR & (1 << 6)) == 0) && ready == 1)
+		{
+			state = 0;
+			ready = 0;
+		}
+		
+		if((GPIOC_PDIR & (1 << 6)) == (1 << 6))
+		{
+			ready = 1;
 		}
 		
 		findLineLocation();
