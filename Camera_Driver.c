@@ -24,7 +24,12 @@
 // Threshold = avg * scalar / divisor
 #define THRESHOLD_SCALAR	1
 #define THRESHOLD_DIVISOR	1
+
+//5500
 #define MIN_THRESHOLD 5500
+#define THRESHOLD_MULT 1.6
+#define THRESH_COUNT 4
+
 #define TURN_SCALAR 3.1
 #define BUFFER_SIZE 2
 #define HIST_SIZE 8
@@ -33,10 +38,6 @@
 #define MIN_SPEED 43
 //0.5
 #define SPEED_SCALAR 0.5
-
-#define KP	0.9
-#define KI	0.1
-#define KD	0
 
 // Default System clock value
 // period = 1/20485760  = 4.8814395e-8
@@ -369,8 +370,8 @@ void bufferAndBlur(uint16_t *curr_line){
 ***********************************************************************/
 void findLineLocation()
 {
-	int i, left_index, right_index, largest_white_area, curr_area, largest_area_index, last_hist;
-	int integral, derivative, proportional, curr_error;
+	int i, left_index, right_index, largest_white_area, curr_area, largest_area_index;
+	int thresholdState, thresholdCounter;
 	unsigned int threshold;
 	long int average;
 	
@@ -379,10 +380,8 @@ void findLineLocation()
 	if(!newDataSinceLast){
 		return;
 	}
-	//if(newDataSinceLast > 100){
-	//uart_putnumU(newDataSinceLast);
-	//uart_put("\n\r");
-	newDataSinceLast = 0;//}
+	
+	newDataSinceLast = 0;
 	
 	average = 0;
 	for(i = LEFT_BOOKEND; i<=RIGHT_BOOKEND; i++)
@@ -391,6 +390,37 @@ void findLineLocation()
 	}
 	average = average / (RIGHT_BOOKEND - LEFT_BOOKEND + 1);
 	threshold = (average * THRESHOLD_SCALAR) / THRESHOLD_DIVISOR;
+	
+	thresholdState = 0;
+	thresholdCounter = 0;
+	for(i = LEFT_BOOKEND; i < RIGHT_BOOKEND; i++)
+	{
+		if(blurred_buffer[i] > threshold && blurred_buffer[i] < threshold * THRESHOLD_MULT)
+		{
+			if(thresholdState == 0)
+			{
+				thresholdState = 1;
+				thresholdCounter++;
+			}
+		}
+		else
+		{
+			if(thresholdState == 1)
+			{
+				thresholdState = 0;
+			}
+		}		
+	}
+	
+	if(thresholdCounter > THRESH_COUNT)
+	{
+		if(state == 1)
+		{
+			//The counter to kill
+			//state = 2;
+		}
+	}
+	
 	if(threshold < MIN_THRESHOLD){
 		if(state == 1)
 		{
@@ -409,7 +439,6 @@ void findLineLocation()
 	i = (LEFT_BOOKEND + RIGHT_BOOKEND) / 2;
 	left_index = i;
 	right_index = i;
-	
 	// look for bright spot at center
 	if(processed_line[i])
 	{
@@ -495,22 +524,7 @@ void findLineLocation()
 			largest_area_index = i + (curr_area / 2);
 		}
 	}
-	if(hist_pos != 0){
-		last_hist = hist_pos - 1;
-	}
-	else{
-		last_hist = HIST_SIZE - 1;
-	}
-
-	//uart_putnumU(largest_area_index);
-	//uart_put("\n\r");
-	curr_error =  largest_area_index - line_hist[last_hist];
 	
-	proportional = KP * curr_error; // KP * (-128, 128)
-	integral = KI * (largest_area_index - 63); // KI * (-64, 64)
-	derivative = KD * curr_error; // KD * (-128, 128)
-	
-	//last_turn = (last_turn + ((proportional + integral + derivative) * 100) / ((KP + KD) * 128 + KI * 64)) / 2;
 	last_turn = (25 * largest_area_index) / 32;
 	last_turn = ((last_turn - 50) * TURN_SCALAR) + 50;
 	if(last_turn < 0){
@@ -519,13 +533,6 @@ void findLineLocation()
 	else if(last_turn > 100){
 		last_turn = 100;
 	}
-	
-	//set servo
-	/*uart_putnumU(largest_area_index);
-	uart_put("\t");
-	uart_putnumU(last_turn);
-	uart_put("\n\r");
-	for(i = 0; i<500000; i++);*/
 	
 	if(state == 1)
 	{
