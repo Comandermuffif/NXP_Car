@@ -14,11 +14,16 @@
 #include "DC_Driver.h"
 #include "Servo_Driver.h"
 #include "Camera_Driver.h"
+#include "main.h"
 
-void initialize(void);
-void delay(int del);
-void Button_Init(void);
-void LED_Init(void);
+/*
+0 = wait
+1 = go
+2 = dead
+3 = wait
+*/
+
+int ready = 1;
 
 /***********************************************************************
 * PURPOSE: Main entry point for the program
@@ -29,40 +34,59 @@ void LED_Init(void);
 ***********************************************************************/
 int main(void)
 {	
-	
-	int enable = 0;
-	
+	int lastState = -1;
 	initialize();
-	setDCMotor(0, 1);
-	setDCMotor(0, 0);
-	setServoMotor(50);
-	// Print welcome over serial
 	uart_put("Running... \n\r");
 	
 	for(;;)
 	{
-		if((GPIOC_PDIR & (1 << 6)) == 0)
+		if(state == 0 && ((GPIOC_PDIR & (1 << 6)) == 0) && ready == 1)
 		{
-			enable = 1;
+			state = 1;
+			ready = 0;
 		}
-		if(enable == 0)
+		
+		if(state == 2 && ((GPIOC_PDIR & (1 << 6)) == 0) && ready == 1)
 		{
-			setDCMotor(0, 1);
-			setDCMotor(0, 0);
-			setServoMotor(50);
-			
-			//Set Red LED
-			GPIOB_PCOR = (1 << 22);
-			GPIOE_PSOR = 1UL << 26;
+			state = 0;
+			ready = 0;
 		}
-		else
+		
+		if((GPIOC_PDIR & (1 << 6)) == (1 << 6))
 		{
-			//setDCMotor(38, 1);
-			//setDCMotor(38, 0);
-			
-			//Set Green LED
-			GPIOE_PCOR = (1 << 26);
-			GPIOB_PSOR = (1UL << 21) | (1UL << 22);
+			ready = 1;
+		}
+		
+		findLineLocation();
+		
+		if(state != lastState)
+		{
+			switch(state)
+			{
+				case 0:
+					setDCMotor(0, 0);
+					setDCMotor(0, 1);
+					setServoMotor(50);
+					//Yellow
+					disable_all();
+					enable_red();
+					enable_green();
+					break;
+				case 1:
+					//Green
+					disable_all();
+					enable_green();
+					break;
+				case 2:
+					setDCMotor(0, 0);
+					setDCMotor(0, 1);
+					setServoMotor(50);
+					//Red
+					disable_all();
+					enable_red();
+					break;
+			}
+			lastState = state;
 		}
 	}
 }
@@ -73,7 +97,8 @@ int main(void)
 *   int del - The number of milliseconds to wait
 * RETURNS:
 ***********************************************************************/
-void delay(int del){
+void delay(int del)
+{
 	int i;
 	for (i=0; i<del*50000; i++){
 		// Do nothing
@@ -85,7 +110,7 @@ void delay(int del){
 * INPUTS:
 * RETURNS:
 ***********************************************************************/
-void initialize()
+void initialize(void)
 {
 	// Initialize UART
 	uart_init();
@@ -112,7 +137,8 @@ void initialize()
 * INPUTS:
 * RETURNS:
 ***********************************************************************/
-void Button_Init(void){
+void Button_Init(void)
+{
 	// Enable clock for Port C PTC6 button
 	SIM_SCGC5 |= SIM_SCGC5_PORTC_MASK;
 	
@@ -121,6 +147,51 @@ void Button_Init(void){
 
 	// Set the push button as an input (0)
 	GPIOC_PDDR &= ~(1 << 6);
+}
+
+/*********************************************************************** 
+* PURPOSE: Turn red portion of RGB LED on
+*
+* INPUTS:
+* RETURNS:
+***********************************************************************/
+void enable_red(void)
+{
+	GPIOB_PCOR = (1 << 22);
+}
+
+/*********************************************************************** 
+* PURPOSE: Turn blue portion of RGB LED on
+*
+* INPUTS:
+* RETURNS:
+***********************************************************************/
+void enable_blue(void)
+{
+	GPIOB_PCOR = (1 << 21);
+}
+
+/*********************************************************************** 
+* PURPOSE: Turn green portion of RGB LED on
+*
+* INPUTS:
+* RETURNS:
+***********************************************************************/
+void enable_green(void)
+{
+	GPIOE_PCOR = (1 << 26);
+}
+
+/*********************************************************************** 
+* PURPOSE: Turn off RGB LED
+*
+* INPUTS:
+* RETURNS:
+***********************************************************************/
+void disable_all(void)
+{
+	GPIOB_PSOR = (1UL << 21) | (1UL << 22);
+	GPIOE_PSOR = 1UL << 26;
 }
 
 /***********************************************************************

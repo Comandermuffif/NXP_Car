@@ -24,14 +24,21 @@
 // Threshold = avg * scalar / divisor
 #define THRESHOLD_SCALAR	1
 #define THRESHOLD_DIVISOR	1
-#define MIN_THRESHOLD 6000
-#define TURN_SCALAR 3
+
+//5500
+#define MIN_THRESHOLD 5500
+#define THRESHOLD_MULT 1.6
+#define EDGE_COUNT 3
+
+#define TURN_SCALAR 3.1
+//2
 #define BUFFER_SIZE 2
 #define HIST_SIZE 8
 
-#define KP	0.9
-#define KI	0.1
-#define KD	0
+//40
+#define MIN_SPEED 43
+//0.5
+#define SPEED_SCALAR 0.5
 
 // Default System clock value
 // period = 1/20485760  = 4.8814395e-8
@@ -47,6 +54,8 @@
 // Starts at -2 so that the SI pulse occurs
 //		ADC reads start
 int pixcnt = -2;
+
+extern int state;
 
 /***********************************************************************
 * PURPOSE: The clock value that's toggled by the FTM
@@ -67,9 +76,6 @@ uint16_t buffer1[128];
 uint16_t rolling_buffer[BUFFER_SIZE][128] = {0};
 uint16_t buffer_pos = 0;
 uint16_t blurred_buffer[128];
-
-uint16_t line_hist[HIST_SIZE];
-uint16_t hist_pos = 0;
 
 int last_turn = 50;
 
@@ -362,144 +368,99 @@ void bufferAndBlur(uint16_t *curr_line){
 ***********************************************************************/
 void findLineLocation()
 {
-	int i, left_index, right_index, largest_white_area, curr_area, largest_area_index, last_hist;
-	int integral, derivative, proportional, curr_error;
+	int i, left_index, right_index, largest_white_area, curr_area, largest_area_index;
+	int largest_white_right_index, largest_white_left_index, increase;
+	int minVal, maxVal, rising, edgeCounter, tempRising, stopcount;
 	unsigned int threshold;
 	long int average;
-	
 	uint16_t processed_line[128];
 	
+	//Return if no data to process
 	if(!newDataSinceLast){
 		return;
 	}
-	//if(newDataSinceLast > 100){
-	//uart_putnumU(newDataSinceLast);
-	//uart_put("\n\r");
-	newDataSinceLast = 0;//}
+	newDataSinceLast = 0;
 	
 	average = 0;
 	for(i = LEFT_BOOKEND; i<=RIGHT_BOOKEND; i++)
 	{
 		average = average + blurred_buffer[i];
-	}
+	}	
 	average = average / (RIGHT_BOOKEND - LEFT_BOOKEND + 1);
 	threshold = (average * THRESHOLD_SCALAR) / THRESHOLD_DIVISOR;
+	
+	//Kill if beneath the min threshold, IE off the track
 	if(threshold < MIN_THRESHOLD){
+		if(state == 1)
+		{
+			state = 2;
+		}
 		return;
 	}
-	
+	increase = 0;
+	//Generate binary data
+	stopcount = 0;
 	for(i = LEFT_BOOKEND; i < RIGHT_BOOKEND; i++)
 	{
 		processed_line[i] = (blurred_buffer[i] > threshold);
+		if(blurred_buffer[i] > threshold * (6.0 / 3.0) && increase == 0){
+			stopcount++;
+			increase = 1;
+		}else if(blurred_buffer[i] < threshold * 6.0 / 3.0){
+			increase = 0;
+		}
 	}
+	if(stopcount > 2){
+		//uart_putnumU(stopcount);
+		//uart_put("\n\r");
+		//state = 2;
+		//return;
+	}
+	//Find the center of the track
 	largest_area_index = 64;
 	largest_white_area = 0;
+	largest_white_left_index = 64;
+	largest_white_right_index = 64;
+	
+	
+	left_index = -1;
+	right_index = -1;
 	curr_area = 0;
-	i = (LEFT_BOOKEND + RIGHT_BOOKEND) / 2;
-	left_index = i;
-	right_index = i;
 	
-	// look for bright spot at center
-	if(processed_line[i])
+	for(i = LEFT_BOOKEND; i <= RIGHT_BOOKEND; i++)
 	{
-		//cheat for now, optimize later? Can compute area by indexes wo iterating
-		while(processed_line[--i])
+		if(processed_line[i] == 1)
 		{
-			largest_white_area++;
-			if(i <= LEFT_BOOKEND)
+			if(left_index == -1)
 			{
-				break;
+				left_index = i;
 			}
-		}
-		left_index = i;
-		
-		i = right_index;
-		
-		while(processed_line[++i])
-		{
-			largest_white_area++;
-			if(i >= RIGHT_BOOKEND)
-			{
-				break;
-			}
-		}
-		right_index = i;
-		
-		largest_area_index = (left_index + right_index) / 2;
-	}
-	
-	while(left_index >= LEFT_BOOKEND)
-	{
-		//can optimize as above
-		i = left_index;
-		curr_area = 0;
-		while(processed_line[--left_index] == 0){
-			if(left_index <= LEFT_BOOKEND)
-			{
-				break;
-			}
-		}
-		if(left_index < LEFT_BOOKEND)
-		{
-			break;
-		}
-		while(processed_line[left_index--]){
 			curr_area++;
-			if(left_index < LEFT_BOOKEND)
-			{
-				break;
-			}
+			right_index = i;
 		}
-		if(curr_area > largest_white_area)
+		else
 		{
-			largest_white_area = curr_area;
-			largest_area_index = i + (curr_area / 2);
+			if(curr_area > largest_white_area)
+			{
+				largest_area_index = (left_index + right_index)/2;
+				largest_white_area = curr_area;
+				largest_white_left_index = left_index;
+				largest_white_right_index = right_index;
+			}
+			curr_area = 0;
+			left_index = -1;
+			right_index = -1;
 		}
 	}
-	while(right_index <= RIGHT_BOOKEND)
+	if(curr_area > largest_white_area)
 	{
-		//can optimize as above
-		i = right_index;
-		curr_area = 0;
-		while(processed_line[++right_index] == 0){
-			if(right_index >= RIGHT_BOOKEND)
-			{
-				break;
-			}
-		}
-		if(right_index >= RIGHT_BOOKEND)
-		{
-			break;
-		}
-		while(processed_line[right_index++]){
-			curr_area++;
-			if(right_index > RIGHT_BOOKEND)
-			{
-				break;
-			}
-		}
-		if(curr_area > largest_white_area)
-		{
-			largest_white_area = curr_area;
-			largest_area_index = i + (curr_area / 2);
-		}
+		largest_area_index = (left_index + right_index)/2;
+		largest_white_area = curr_area;
+		largest_white_left_index = left_index;
+		largest_white_right_index = right_index;
 	}
-	if(hist_pos != 0){
-		last_hist = hist_pos - 1;
-	}
-	else{
-		last_hist = HIST_SIZE - 1;
-	}
-
-	//uart_putnumU(largest_area_index);
-	//uart_put("\n\r");
-	curr_error =  largest_area_index - line_hist[last_hist];
 	
-	proportional = KP * curr_error; // KP * (-128, 128)
-	integral = KI * (largest_area_index - 63); // KI * (-64, 64)
-	derivative = KD * curr_error; // KD * (-128, 128)
-	
-	//last_turn = (last_turn + ((proportional + integral + derivative) * 100) / ((KP + KD) * 128 + KI * 64)) / 2;
+	//Set the turn values
 	last_turn = (25 * largest_area_index) / 32;
 	last_turn = ((last_turn - 50) * TURN_SCALAR) + 50;
 	if(last_turn < 0){
@@ -509,14 +470,20 @@ void findLineLocation()
 		last_turn = 100;
 	}
 	
-	//set servo
-	/*uart_putnumU(largest_area_index);
-	uart_put("\t");
-	uart_putnumU(last_turn);
-	uart_put("\n\r");
-	for(i = 0; i<500000; i++);*/
-	setServoMotor(100 - last_turn);
+	if(state == 1)
+	{
+		setServoMotor(100 - last_turn);
 	
-	line_hist[hist_pos] = largest_area_index;
-	hist_pos = (hist_pos + 1) % HIST_SIZE;
+		//1 = left, 0 = right
+		if(last_turn > 50)
+		{
+			setDCMotor(MIN_SPEED + (50 - (last_turn - 50)) * SPEED_SCALAR, 1);
+			setDCMotor(MIN_SPEED + (50 - (last_turn - 50)) * SPEED_SCALAR, 0);
+		}
+		else
+		{
+			setDCMotor(MIN_SPEED + last_turn * SPEED_SCALAR, 1);
+			setDCMotor(MIN_SPEED + last_turn * SPEED_SCALAR, 0);
+		}
+	}
 }
