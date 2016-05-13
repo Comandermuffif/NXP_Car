@@ -387,8 +387,7 @@ void bufferAndBlur(uint16_t *curr_line){
 void findLineLocation()
 {
 	int i, left_index, right_index, largest_white_area, curr_area, largest_area_index;
-	int largest_white_right_index, largest_white_left_index, increase;
-	int minVal, maxVal, rising, edgeCounter, tempRising, stopcount;
+	int increase, stopcount;
 	unsigned int threshold;
 	long int average;
 	uint16_t processed_line[128];
@@ -430,17 +429,15 @@ void findLineLocation()
 			increase = 0;
 		}
 	}
-	if(stopcount > 2){
+	//if(stopcount > 2){
 		//uart_putnumU(stopcount);
 		//uart_put("\n\r");
 		//state = 2;
 		//return;
-	}
+	//}
 	//Find the center of the track
 	largest_area_index = 64;
 	largest_white_area = 0;
-	largest_white_left_index = 64;
-	largest_white_right_index = 64;
 	
 	
 	left_index = -1;
@@ -465,8 +462,6 @@ void findLineLocation()
 			{
 				largest_area_index = (left_index + right_index)/2;
 				largest_white_area = curr_area;
-				largest_white_left_index = left_index;
-				largest_white_right_index = right_index;
 			}
 			curr_area = 0;
 			left_index = -1;
@@ -478,8 +473,6 @@ void findLineLocation()
 	{
 		largest_area_index = (left_index + right_index)/2;
 		largest_white_area = curr_area;
-		largest_white_left_index = left_index;
-		largest_white_right_index = right_index;
 	}
 	
 	//Set the turn values, strictly proportional
