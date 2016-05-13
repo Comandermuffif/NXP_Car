@@ -100,7 +100,6 @@ void bufferAndBlur(uint16_t *curr_line);
 * PURPOSE: Find the line location and set servo and motor based on that
 *
 * INPUTS:
-*		curr_line - The array of values from the camera
 * RETURNS:
 ***********************************************************************/
 void findLineLocation(void);

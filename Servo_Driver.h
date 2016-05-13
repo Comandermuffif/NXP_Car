@@ -1,5 +1,5 @@
 /***********************************************************************
-* Title: 	Lab06 - Motors
+* Title: 	NXP Cup Servo Driver
 * Purpose: 	Drive Servo Motors
 * Author: 	Vincent Coffey (vhc1003@rit.edu)
 * Revised: 	March 30, 2016

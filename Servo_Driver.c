@@ -10,9 +10,12 @@
 #include "Servo_Driver.h"
 
 #define CLOCK					20485760u
-#define Frequency			50
+// Update frequency of Servos
+#define Frequency				50
+// Minimum and Max turn to avoid stripping servo gears
 #define MIN_TURN				13
 #define MAX_TURN				87
+// Servo center value to account for offset (unused)
 #define SERVO_CENTER			50
 
 /***********************************************************************
@@ -25,7 +28,6 @@ void setServoMotor(unsigned int dutyCycle)
 {
 	uint16_t mod = (uint16_t) (((CLOCK * (dutyCycle + 100)) /(Frequency * 8)) / 2000);
 	
-	//implement SERVO_CENTER usage as well (later)
 	if(dutyCycle < MIN_TURN)
 	{
 		mod = (uint16_t) (((CLOCK * (MIN_TURN + 100)) /(Frequency * 8)) / 2000);

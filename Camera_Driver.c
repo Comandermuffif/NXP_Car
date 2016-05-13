@@ -2,7 +2,8 @@
 * Title: 		Car - Camera
 * Purpose: 	Drive Camera
 * Author: 	Vincent Coffey (vhc1003@rit.edu)
-						Alex Avery
+*						Alex Avery
+*						Michael Albert (mda5893@rit.edu)
 * Revised: 	March 30, 2016
 * Date:			03/30/2016
 ***********************************************************************/
@@ -17,28 +18,28 @@
 
 #define DEFAULT_SYSTEM_CLOCK 20485760u /* Default System clock value */
 #define UPDATE_FREQUENCY 50
-#define MOD_AMOUNT 50
+#define MOD_AMOUNT 50 // Update frequency of the camera
 
-#define LEFT_BOOKEND		2
-#define RIGHT_BOOKEND		125
+#define LEFT_BOOKEND		2 // Ignore bits to the left of this value in image
+#define RIGHT_BOOKEND		125 // Ignore bits to the right of this value in image
 // Threshold = avg * scalar / divisor
-#define THRESHOLD_SCALAR	1
+#define THRESHOLD_SCALAR	1 // Used in determining threshold value
 #define THRESHOLD_DIVISOR	1
 
 //5500
-#define MIN_THRESHOLD 5500
-#define THRESHOLD_MULT 1.6
-#define EDGE_COUNT 3
+#define MIN_THRESHOLD 5500 // Minimum threshold for kill case
+#define THRESHOLD_MULT 1.6 // unused
+#define EDGE_COUNT 3 // unused
 
-#define TURN_SCALAR 3.1
+#define TURN_SCALAR 3.1 // Multiply proportional steering by this value
 //2
-#define BUFFER_SIZE 2
-#define HIST_SIZE 8
+#define BUFFER_SIZE 2 // Blur last X samples together for image
+#define HIST_SIZE 8 // keep track of line position for last X cycles
 
 //40
-#define MIN_SPEED 43
+#define MIN_SPEED 43 // Base speed for running the course
 //0.5
-#define SPEED_SCALAR 0.5
+#define SPEED_SCALAR 0.5 // Speed multiplier for accelerating on straight sections
 
 // Default System clock value
 // period = 1/20485760  = 4.8814395e-8
@@ -62,6 +63,9 @@ extern int state;
 ***********************************************************************/
 int clkval = 0;
 
+/***********************************************************************
+* PURPOSE: Records if new data from camera received since last run
+***********************************************************************/
 uint16_t newDataSinceLast = 0;
 
 /***********************************************************************
@@ -73,10 +77,16 @@ uint16_t *line;
 uint16_t buffer0[128];
 uint16_t buffer1[128];
 
+/***********************************************************************
+* PURPOSE: Buffer to store last sample arrays
+***********************************************************************/
 uint16_t rolling_buffer[BUFFER_SIZE][128] = {0};
 uint16_t buffer_pos = 0;
 uint16_t blurred_buffer[128];
 
+/***********************************************************************
+* PURPOSE: Keeps track of last value sent to servos
+***********************************************************************/
 int last_turn = 50;
 
 /***********************************************************************
@@ -131,10 +141,12 @@ void FTM2_IRQHandler(void){ //For FTM timer
 		clkval = 0; // make sure clock variable = 0
 		pixcnt = -2; // reset counter
 		
-		//findLineLocation(line);
+		// add the read-in line to the rolling buffer
 		bufferAndBlur(line);
+		// Indicate new data is available
 		newDataSinceLast++;
 		
+		// switch buffer to read in new line to
 		if(line == &buffer0[0])
 		{
 			line = &buffer1[0];
@@ -343,6 +355,13 @@ void init_ADC0(void) {
 	NVIC_EnableIRQ(ADC0_IRQn);
 }
 
+/***********************************************************************
+* PURPOSE: Add most recent line to buffer and blur it horizontally, then
+*			blur it vertically with the other samples in the buffer
+*
+* INPUTS: curr_line - pointer to line data being read in
+* RETURNS:
+***********************************************************************/
 void bufferAndBlur(uint16_t *curr_line){
 	int i;
 	
@@ -363,7 +382,6 @@ void bufferAndBlur(uint16_t *curr_line){
 * PURPOSE: Find the line location and set servo and motor based on that
 *
 * INPUTS:
-*		curr_line - The array of values from the camera
 * RETURNS:
 ***********************************************************************/
 void findLineLocation()
@@ -381,12 +399,14 @@ void findLineLocation()
 	}
 	newDataSinceLast = 0;
 	
+	// Compute average of data points in sample
 	average = 0;
 	for(i = LEFT_BOOKEND; i<=RIGHT_BOOKEND; i++)
 	{
 		average = average + blurred_buffer[i];
-	}	
+	}
 	average = average / (RIGHT_BOOKEND - LEFT_BOOKEND + 1);
+	// set threshold based on average
 	threshold = (average * THRESHOLD_SCALAR) / THRESHOLD_DIVISOR;
 	
 	//Kill if beneath the min threshold, IE off the track
@@ -398,7 +418,7 @@ void findLineLocation()
 		return;
 	}
 	increase = 0;
-	//Generate binary data
+	//Generate binary data based on threshold
 	stopcount = 0;
 	for(i = LEFT_BOOKEND; i < RIGHT_BOOKEND; i++)
 	{
@@ -427,6 +447,7 @@ void findLineLocation()
 	right_index = -1;
 	curr_area = 0;
 	
+	// find biggest white area on track
 	for(i = LEFT_BOOKEND; i <= RIGHT_BOOKEND; i++)
 	{
 		if(processed_line[i] == 1)
@@ -452,6 +473,7 @@ void findLineLocation()
 			right_index = -1;
 		}
 	}
+	// save location if it's biggest area
 	if(curr_area > largest_white_area)
 	{
 		largest_area_index = (left_index + right_index)/2;
@@ -460,9 +482,11 @@ void findLineLocation()
 		largest_white_right_index = right_index;
 	}
 	
-	//Set the turn values
+	//Set the turn values, strictly proportional
 	last_turn = (25 * largest_area_index) / 32;
 	last_turn = ((last_turn - 50) * TURN_SCALAR) + 50;
+	
+	// Make sure turn value is in 0 to 100 range
 	if(last_turn < 0){
 		last_turn = 0;
 	}
@@ -470,11 +494,13 @@ void findLineLocation()
 		last_turn = 100;
 	}
 	
+	// set Servos and DC motors if we are running
 	if(state == 1)
 	{
 		setServoMotor(100 - last_turn);
 	
 		//1 = left, 0 = right
+		// speedup for low turn values (ie going straight)
 		if(last_turn > 50)
 		{
 			setDCMotor(MIN_SPEED + (50 - (last_turn - 50)) * SPEED_SCALAR, 1);

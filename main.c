@@ -2,9 +2,9 @@
  * Main Method for testing the PWM Code for the K64F
  * PWM signal can be connected to output pins are PC3 and PC4
  * 
- * Author:  
- * Created:  
- * Modified:  
+ * Author:  Michael Albert (mda5893@rit.edu) Vincent Coffey (vhc1003@rit.edu)
+ * Created:  March 30, 2016
+ * Modified:  May 1, 2016
  */
 
 #include <stdlib.h>
@@ -16,17 +16,13 @@
 #include "Camera_Driver.h"
 #include "main.h"
 
-/*
-0 = wait
-1 = go
-2 = dead
-3 = wait
-*/
-
 int ready = 1;
 
 /***********************************************************************
-* PURPOSE: Main entry point for the program
+* PURPOSE: Main entry point for the program, runs a simple state machine
+*		States: 1. Standby (Yellow LED)
+*				2. Run (Green LED)
+*				3. Kill (Red LED)
 *
 * INPUTS:
 * TURNS:
@@ -40,30 +36,36 @@ int main(void)
 	
 	for(;;)
 	{
+		// Check for button press to move from Standby to Run
 		if(state == 0 && ((GPIOC_PDIR & (1 << 6)) == 0) && ready == 1)
 		{
 			state = 1;
 			ready = 0;
 		}
 		
+		// Check for button press to move from Kill to Standby
 		if(state == 2 && ((GPIOC_PDIR & (1 << 6)) == 0) && ready == 1)
 		{
 			state = 0;
 			ready = 0;
 		}
 		
+		// Track whether switch was pressed previous cycle, to avoid
+		// issues with holding button
 		if((GPIOC_PDIR & (1 << 6)) == (1 << 6))
 		{
 			ready = 1;
 		}
 		
+		// Compute line location and set servos
 		findLineLocation();
 		
+		// Switch appropriate things on state change
 		if(state != lastState)
 		{
 			switch(state)
 			{
-				case 0:
+				case 0: // Standby
 					setDCMotor(0, 0);
 					setDCMotor(0, 1);
 					setServoMotor(50);
@@ -72,12 +74,12 @@ int main(void)
 					enable_red();
 					enable_green();
 					break;
-				case 1:
+				case 1: // Run
 					//Green
 					disable_all();
 					enable_green();
 					break;
-				case 2:
+				case 2: // Kill
 					setDCMotor(0, 0);
 					setDCMotor(0, 1);
 					setServoMotor(50);

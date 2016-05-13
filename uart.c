@@ -1,5 +1,5 @@
 /***********************************************************************
-* Title: Lab 2 - UART Driver
+* Title: UART Driver
 * Purpose: Header for UART routines for serial IO
 * Author  : Vincent Coffey (vhc1003@rit.edu)
 * Revised : February 02, 2016
